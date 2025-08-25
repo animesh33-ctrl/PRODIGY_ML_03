@@ -9,14 +9,16 @@ import torchvision.models as models
 from ultralytics import YOLO
 from PIL import Image
 
-detector = YOLO("yolov8n.pt")  
+
+
+detector = YOLO("yolov8n.pt")
 
 svm = joblib.load("./svm_resnet.pkl")
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 efficientnet = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.DEFAULT)
-efficientnet.classifier = nn.Identity()  # remove final layer
+efficientnet.classifier = nn.Identity()
 efficientnet = efficientnet.to(device).eval()
 
 
@@ -30,7 +32,8 @@ transform = transforms.Compose([
 class_names = ["Cat", "Dog"]
 
 
-def classify_image(image_path):
+
+def classify_and_show(image_path):
     img = cv2.imread(image_path)
     if img is None:
         print(f"[ERROR] Could not read {image_path}")
@@ -38,12 +41,11 @@ def classify_image(image_path):
 
     results = detector(img, verbose=False)[0]
 
-    output_labels = []
     for box in results.boxes:
-        cls_id = int(box.cls[0])  
+        cls_id = int(box.cls[0])
         conf = float(box.conf[0])
 
-
+        
         if cls_id in [15, 16]:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             crop = img[y1:y2, x1:x2]
@@ -62,18 +64,24 @@ def classify_image(image_path):
             
             pred = svm.predict(feat)[0]
             label = class_names[pred]
-            output_labels.append((label, conf, (x1, y1, x2, y2)))
+
+            
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(img, f"{label} ({conf:.2f})", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
     
-    if not output_labels:
-        print(f"{image_path}: No Cat/Dog detected")
-    else:
-        for label, conf, bbox in output_labels:
-            print(f"{image_path}: {label} ({conf:.2f})")
+    cv2.imshow("Cat vs Dog Classifier", img)
+    print(f"Showing: {image_path}")
+
+    
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 
-image_folder = "./images"  
+
+image_folder = "./images" 
 
 for filename in os.listdir(image_folder):
     if filename.lower().endswith((".jpg", ".jpeg", ".png")):
-        classify_image(os.path.join(image_folder, filename))
+        classify_and_show(os.path.join(image_folder, filename))
